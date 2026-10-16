@@ -31,9 +31,10 @@ window.R26_CONFIG = {
       layer: "Visual appearance",
       name: "Micro Visual Cue Detection (CNN)",
       owner: "M. A. O. Rashmika · IT22546234",
-      url: "",
+      url: "https://c3-visual.whitewater-a91f119b.koreacentral.azurecontainerapps.io",
       endpoint: "/predict",
-      adapter: "c3"
+      adapter: "c3",
+      timeoutMs: 240000          // Azure + TensorFlow can take a few minutes to wake up
     },
     {
       id: "C4",

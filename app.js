@@ -69,7 +69,7 @@
   for (const c of cfg.components) {
     if (!c.url) continue;
     setDot(c.id, "wait", "Waking");
-    fetchJSON(c.url + "/health", {}, cfg.requestTimeoutMs)
+    fetchJSON(c.url + "/health", {}, c.timeoutMs || cfg.requestTimeoutMs)
       .then(r => r.ok ? setDot(c.id, "on", "Online") : setDot(c.id, "err", "Error"))
       .catch(() => setDot(c.id, "err", "No reply"));
   }
@@ -131,7 +131,7 @@
         label: b.prediction === "PHISHING" ? "phishing" : "legitimate",
         score: b.phishing_probability, threshold: b.threshold,
         message: `Page type ${pretty(b.page_type)} → ${b.model_used || "model"}`,
-        evidence: [b.model_name && `Model: ${b.model_name}`, Number.isFinite(b.router_confidence) && `Router confidence: ${b.router_confidence}`].filter(Boolean)
+        evidence: [b.model_name && `Model: ${b.model_name}`, b.router_confidence != null && `Router confidence: ${b.router_confidence}`].filter(Boolean)
       };
     }
   };
@@ -221,7 +221,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: target })
-      }, cfg.requestTimeoutMs);
+      }, c.timeoutMs || cfg.requestTimeoutMs);
       const result = adapters[c.adapter](http);
       showResult(c.id, result, (performance.now() - started) / 1000);
       setDot(c.id, "on", "Online");
