@@ -40,7 +40,7 @@ window.R26_CONFIG = {
       layer: "Infrastructure",
       name: "Domain Intelligence (DNS · RDAP · TLS · IP)",
       owner: "C. I. Vitharana · IT22911308",
-      url: "",
+      url: "https://c4-domain-intelligence-detector.onrender.com",
       endpoint: "/analyze",
       adapter: "contract"
     }
