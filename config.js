@@ -13,7 +13,7 @@ window.R26_CONFIG = {
       layer: "Domain name",
       name: "Domain & Typosquatting Detection",
       owner: "I. A. Niunhella · IT22131010",
-      url: "",
+      url: "https://c1-domain-typosquatting-detector.onrender.com",
       endpoint: "/predict",
       adapter: "c1"
     },

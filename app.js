@@ -109,12 +109,18 @@
     c1(http) {
       if (!http.ok) return httpProblem(http);
       const b = http.body || {};
+      // Allowlist/rule decisions override the model, so its raw score is evidence, not the result.
+      const byModel = b.decision_source === "frozen_ml_hybrid";
+      const evidence = (b.evidence || []).slice(0, 4);
+      if (!byModel && Number.isFinite(b.phishing_probability)) {
+        evidence.push(`Raw ML score ${b.phishing_probability.toFixed(3)} – overridden by ${pretty(b.decision_source)}`);
+      }
       return {
         status: "ok",
         label: b.prediction === "PHISHING" ? "phishing" : "legitimate",
-        score: b.phishing_probability, threshold: b.frozen_threshold,
+        score: byModel ? b.phishing_probability : null, threshold: b.frozen_threshold,
         message: `${pretty(b.detailed_prediction)} · decided by ${pretty(b.decision_source)}`,
-        evidence: (b.evidence || []).slice(0, 5)
+        evidence
       };
     },
     c3(http) {
