@@ -103,8 +103,22 @@
     contract(http) {
       if (!http.ok) return httpProblem(http);
       const b = http.body || {};
-      const status = b.status === "ok" ? "ok" : b.status === "invalid_input" ? "invalid" : b.status === "error" ? "error" : "inconclusive";
-      return { status, label: b.label, score: b.score, threshold: b.threshold, message: b.message, evidence: contractEvidence(b.evidence) };
+      const e = b.evidence || {};
+      let status = b.status === "ok" ? "ok" : b.status === "invalid_input" ? "invalid" : b.status === "error" ? "error" : "inconclusive";
+      let message = b.message;
+      const source = String(e.decision_source || "");
+      // C4: a verdict built from zero live data is missing evidence, not a legitimate vote.
+      if (status === "ok" && e.data_quality === "INSUFFICIENT DATA" && source === "TUNED_80") {
+        status = "inconclusive";
+        message = "No live infrastructure data could be collected – not counted as a vote.";
+      }
+      const listed = status === "ok" && source.startsWith("OPENPHISH");
+      return {
+        status, label: b.label, score: b.score, threshold: b.threshold, message,
+        strong: listed ? "listed in the OpenPhish phishing feed (exact match)" : null,
+        policyScore: listed ? 1 : undefined,
+        evidence: contractEvidence(e)
+      };
     },
     c1(http) {
       if (!http.ok) return httpProblem(http);
@@ -115,10 +129,16 @@
       if (!byModel && Number.isFinite(b.phishing_probability)) {
         evidence.push(`Raw ML score ${b.phishing_probability.toFixed(3)} – overridden by ${pretty(b.decision_source)}`);
       }
+      const allowlisted = b.decision_source === "trusted_allowlist";
+      const rule = b.decision_source === "deterministic_typosquatting_evidence";
       return {
         status: "ok",
         label: b.prediction === "PHISHING" ? "phishing" : "legitimate",
         score: byModel ? b.phishing_probability : null, threshold: b.frozen_threshold,
+        // C1's own policy values: 0 for a trusted-domain match, 1 for a typosquatting rule
+        policyScore: allowlisted ? 0 : rule ? 1 : undefined,
+        allowlisted,
+        strong: rule ? `typosquatting rule (${(b.applied_rules || []).map(pretty).join(", ") || "imitation pattern"})` : null,
         message: `${pretty(b.detailed_prediction)} · decided by ${pretty(b.decision_source)}`,
         evidence
       };
@@ -169,20 +189,19 @@
   }
 
   function renderSummary(target, results) {
-    $("#summary").hidden = false;
+    const summary = $("#summary");
+    summary.hidden = false;
     $("#target").textContent = target;
-    const answered = results.filter(r => r && r.status === "ok");
-    const phish = answered.filter(r => r.label === "phishing").length;
-    const line = $("#summary-line");
-    line.replaceChildren();
-    if (!answered.length) {
-      line.textContent = "No layer returned a result for this URL.";
-    } else {
-      const strong = document.createElement("span");
-      strong.className = phish ? "hot" : "cool";
-      strong.textContent = `${phish} of ${answered.length}`;
-      line.append(strong, ` answering ${answered.length === 1 ? "layer flags" : "layers flag"} this URL as phishing`);
-    }
+    const entries = cfg.components.map((c, i) => ({ id: c.id, result: results[i] })).filter((e, i) => cfg.components[i].url);
+    const f = window.R26Fusion.fuse(entries);
+    summary.dataset.verdict = f.verdict;
+    $("#fused-verdict").textContent = { phishing: "Phishing", legitimate: "Legitimate", review: "Needs review" }[f.verdict];
+    $("#fused-reason").textContent = f.reason;
+    summary.dataset.band = f.band;
+    $("#risk-value").textContent = f.risk === null ? "–" : `${f.risk} / 100 · ${f.band}`;
+    $("#risk-fill").style.width = (f.risk || 0) + "%";
+    $("#summary-line").textContent =
+      `Layers answering: ${f.answered} of ${f.connected} · Triggered by: ${f.triggered.join(", ") || "none"} · Rule ${f.rule}`;
     const tally = $("#tally");
     tally.replaceChildren();
     cfg.components.forEach((c, i) => {

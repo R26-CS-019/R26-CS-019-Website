@@ -55,13 +55,22 @@
 
     <section id="summary" class="summary" hidden aria-live="polite">
       <div class="summary-head">
-        <span class="label">Layer agreement</span>
+        <span class="label">Fused verdict</span>
         <span id="target" class="target mono"></span>
       </div>
-      <p id="summary-line" class="summary-line"></p>
+      <div class="fusion">
+        <div id="fused-verdict" class="fused-verdict"></div>
+        <div class="risk">
+          <div class="risk-top"><span class="label">Risk score</span><span id="risk-value" class="risk-value mono"></span></div>
+          <div class="risk-track"><div id="risk-fill" class="risk-fill"></div></div>
+        </div>
+      </div>
+      <p id="fused-reason" class="fused-reason"></p>
+      <p id="summary-line" class="summary-detail mono"></p>
       <div id="tally" class="tally" aria-hidden="true"></div>
-      <p class="summary-note">A simple count of the layers that answered. The group has not adopted a combined
-        decision rule, so this is not a single verdict.</p>
+      <p class="summary-note">Decision fusion v1.1: the group report's status-aware rules (Appendix A.3) plus a
+        strong-evidence rule. The risk score blends the strongest warning with the average of all answering layers,
+        each scaled so its own threshold sits at 50. It is not a calibrated probability.</p>
     </section>
 
     <section class="grid" id="cards" aria-label="Component results"></section>
@@ -122,6 +131,7 @@
   </template>
 
   <script src="config.js"></script>
+  <script src="fusion.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

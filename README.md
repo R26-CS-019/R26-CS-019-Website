@@ -5,6 +5,25 @@ adaptive multi-layer phishing detection framework. It sends one URL to every
 connected component API at the same time and shows each result on its own card,
 plus a simple count of how many answering layers flag the URL.
 
+## Decision fusion (v1.1)
+
+`fusion.js` combines the answering layers, following the group report (Section 4.4, Appendix A.3):
+
+| Rule | Condition | Verdict |
+|---|---|---|
+| R1 | C1 matched a trusted domain but C2 or C3 flags the page | Needs review |
+| S1 | Any flag that is strong evidence (C1 typosquatting rule, C4 OpenPhish exact match) | Phishing |
+| R2 | Two or more layers flag phishing | Phishing |
+| R3 | Exactly one layer flags phishing | Needs review |
+| R4 | No flags and at least three layers answered | Legitimate |
+| R5 | Anything else (too few usable answers) | Needs review |
+
+Failed, inconclusive or unconnected layers are never counted as legitimate votes (C4 results built
+from zero live data are treated as inconclusive). **Risk score (0–100):** each layer's score is
+scaled so its own threshold sits at 50 (rule decisions use C1's policy values 0/100, a feed match
+uses 100); risk = 50% strongest layer + 50% average layer. Bands: low < 40 ≤ medium < 70 ≤ high.
+Not a calibrated probability; to be validated by the joint evaluation.
+
 ## Connect a component
 
 Edit **`config.js`** only: paste the component's Render address into its `url`
