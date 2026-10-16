@@ -1,14 +1,24 @@
-/* R26-CS-019 decision fusion, version 1.1
+/* R26-CS-019 decision fusion, version 1.2 (binary)
  *
- * Fusion v1 follows the group report (Section 4.4, Appendix A.3). v1.1 adds one
- * agreed refinement: a single flag that is "strong evidence" decides Phishing.
+ * Final classification is Phishing or Legitimate, with a 0-100 risk score, as in
+ * the TAF output layer. The rule was chosen with the joint evaluation (100 live
+ * URLs: majority rule 91% accuracy, 96% recall, 14% FPR – better than any single
+ * layer or any risk-score threshold) and must be confirmed on a new run.
  *
- * Input: one normalised result per component (null = not connected):
+ *   T1  C1 matched a trusted domain and the flags include page-content layers
+ *       (C2/C3) -> Legitimate (content warnings alone do not override it)
+ *   S1  any strong-evidence flag (C1 typosquatting rule, C4 OpenPhish match) -> Phishing
+ *   M2  two or more answering layers flag phishing                           -> Phishing
+ *   M1  exactly one layer flags                                               -> Legitimate
+ *   M0  no layer flags                                                        -> Legitimate
+ *   U0  no layer could analyse the URL                                        -> Unable to assess
+ *
+ * Input: one normalised result per connected component:
  *   { status: "ok"|"inconclusive"|"invalid"|"busy"|"error",
  *     label: "phishing"|"legitimate", score, threshold,
  *     policyScore (0..1, when a rule rather than a model decided),
  *     strong (text, when the flag is strong evidence), allowlisted (C1 only) }
- * Missing, failed or inconclusive layers are never counted as legitimate votes.
+ * Failed, inconclusive or unconnected layers are never counted as votes.
  */
 (function (root) {
   "use strict";
@@ -42,29 +52,35 @@
     const ok = entries.filter(e => e.result && e.result.status === "ok");
     const flags = ok.filter(e => e.result.label === "phishing");
     const names = list => list.map(e => e.id).join(", ");
+    const strong = flags.filter(e => e.result.strong);
     const c1 = ok.find(e => e.id === "C1");
     const contentFlags = flags.filter(e => e.id === "C2" || e.id === "C3");
-    const strong = flags.filter(e => e.result.strong);
     let verdict, rule, reason;
 
-    if (c1 && c1.result.allowlisted && contentFlags.length) {
-      verdict = "review"; rule = "R1";
-      reason = `C1 matched a trusted domain, but ${names(contentFlags)} flagged the page. A trusted name does not prove the page is safe.`;
+    if (!ok.length) {
+      verdict = "unknown"; rule = "U0";
+      reason = "No layer could analyse this URL, so no classification is possible.";
+    } else if (c1 && c1.result.allowlisted && contentFlags.length) {
+      verdict = "legitimate"; rule = "T1";
+      reason = `C1 matched a trusted domain. Warnings from ${names(flags)} are shown in the risk score ` +
+               "but do not override it.";
     } else if (strong.length) {
       verdict = "phishing"; rule = "S1";
       reason = "Strong evidence: " + strong.map(e => `${e.id} – ${e.result.strong}`).join("; ") + ".";
     } else if (flags.length >= 2) {
-      verdict = "phishing"; rule = "R2";
-      reason = `${flags.length} independent layers flag this URL (${names(flags)}).`;
+      verdict = "phishing"; rule = "M2";
+      reason = `${flags.length} of ${ok.length} answering layers flag this URL (${names(flags)}).`;
     } else if (flags.length === 1) {
-      verdict = "review"; rule = "R3";
-      reason = `Only ${flags[0].id} flags this URL. A single warning is never ignored – check its evidence first.`;
-    } else if (ok.length >= 3) {
-      verdict = "legitimate"; rule = "R4";
-      reason = `None of the ${ok.length} answering layers found phishing evidence. This is not a guarantee of safety.`;
+      verdict = "legitimate"; rule = "M1";
+      reason = `Only ${flags[0].id} flagged this URL (1 of ${ok.length} answering layers) – not enough ` +
+               `agreement for a phishing verdict. See the risk score and ${flags[0].id}'s evidence.`;
     } else {
-      verdict = "review"; rule = "R5";
-      reason = `Only ${ok.length} of ${entries.length} layers gave a usable answer – not enough to call this URL legitimate.`;
+      verdict = "legitimate"; rule = "M0";
+      reason = `None of the ${ok.length} answering layers found phishing evidence.`;
+    }
+    if (verdict === "legitimate") {
+      reason += " This is a model result, not a guarantee of safety.";
+      if (ok.length < entries.length) reason += ` Based on ${ok.length} of ${entries.length} layers.`;
     }
 
     const risk = riskScore(ok.map(e => e.result));
@@ -72,7 +88,7 @@
              triggered: flags.map(e => e.id), answered: ok.length, connected: entries.length };
   }
 
-  const api = { moduleRisk, riskScore, riskBand, fuse, version: "1.1" };
+  const api = { moduleRisk, riskScore, riskBand, fuse, version: "1.2" };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.R26Fusion = api;
 })(this);

@@ -68,9 +68,10 @@
       <p id="fused-reason" class="fused-reason"></p>
       <p id="summary-line" class="summary-detail mono"></p>
       <div id="tally" class="tally" aria-hidden="true"></div>
-      <p class="summary-note">Decision fusion v1.1: the group report's status-aware rules (Appendix A.3) plus a
-        strong-evidence rule. The risk score blends the strongest warning with the average of all answering layers,
-        each scaled so its own threshold sits at 50. It is not a calibrated probability.</p>
+      <p class="summary-note">Decision fusion v1.2 (binary): Phishing when two or more answering layers agree or a
+        strong-evidence rule fires, otherwise Legitimate. Failed layers never vote. The risk score blends the strongest
+        warning with the average of all answering layers, each scaled so its own threshold sits at 50. It is not a
+        calibrated probability.</p>
     </section>
 
     <section class="grid" id="cards" aria-label="Component results"></section>

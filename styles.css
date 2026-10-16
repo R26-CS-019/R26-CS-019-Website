@@ -145,12 +145,12 @@ h1 span { color: var(--muted); display: block; }
 .target { color: var(--muted); font-size: 13px; word-break: break-all; }
 .summary[data-verdict="phishing"] { border-left-color: var(--phish); }
 .summary[data-verdict="legitimate"] { border-left-color: var(--legit); }
-.summary[data-verdict="review"] { border-left-color: var(--warn); }
+.summary[data-verdict="unknown"] { border-left-color: var(--faint); }
 .fusion { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px 28px; align-items: center; margin: 12px 0 4px; }
 .fused-verdict { font: 700 clamp(28px, 4vw, 40px)/1 var(--font-display); letter-spacing: .05em; text-transform: uppercase; }
 .summary[data-verdict="phishing"] .fused-verdict { color: var(--phish); }
 .summary[data-verdict="legitimate"] .fused-verdict { color: var(--legit); }
-.summary[data-verdict="review"] .fused-verdict { color: var(--warn); }
+.summary[data-verdict="unknown"] .fused-verdict { color: var(--muted); }
 .risk-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .risk-value { font-size: 15px; text-transform: uppercase; letter-spacing: .04em; }
 .risk-track { height: 12px; border-radius: 2px; background: var(--line-soft); overflow: hidden; }

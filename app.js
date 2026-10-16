@@ -195,7 +195,7 @@
     const entries = cfg.components.map((c, i) => ({ id: c.id, result: results[i] })).filter((e, i) => cfg.components[i].url);
     const f = window.R26Fusion.fuse(entries);
     summary.dataset.verdict = f.verdict;
-    $("#fused-verdict").textContent = { phishing: "Phishing", legitimate: "Legitimate", review: "Needs review" }[f.verdict];
+    $("#fused-verdict").textContent = { phishing: "Phishing", legitimate: "Legitimate", unknown: "Unable to assess" }[f.verdict];
     $("#fused-reason").textContent = f.reason;
     summary.dataset.band = f.band;
     $("#risk-value").textContent = f.risk === null ? "–" : `${f.risk} / 100 · ${f.band}`;

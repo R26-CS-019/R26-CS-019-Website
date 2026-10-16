@@ -5,20 +5,27 @@ adaptive multi-layer phishing detection framework. It sends one URL to every
 connected component API at the same time and shows each result on its own card,
 plus a simple count of how many answering layers flag the URL.
 
-## Decision fusion (v1.1)
+## Decision fusion (v1.2, binary)
 
-`fusion.js` combines the answering layers, following the group report (Section 4.4, Appendix A.3):
+`fusion.js` gives a final **Phishing** or **Legitimate** classification plus a risk score, as in
+the TAF output layer:
 
 | Rule | Condition | Verdict |
 |---|---|---|
-| R1 | C1 matched a trusted domain but C2 or C3 flags the page | Needs review |
+| T1 | C1 matched a trusted domain and the flags include C2 or C3 (page content) | Legitimate (warnings shown in the risk score) |
 | S1 | Any flag that is strong evidence (C1 typosquatting rule, C4 OpenPhish exact match) | Phishing |
-| R2 | Two or more layers flag phishing | Phishing |
-| R3 | Exactly one layer flags phishing | Needs review |
-| R4 | No flags and at least three layers answered | Legitimate |
-| R5 | Anything else (too few usable answers) | Needs review |
+| M2 | Two or more answering layers flag phishing | Phishing |
+| M1 | Exactly one layer flags phishing | Legitimate (risk score and that layer's evidence shown) |
+| M0 | No layer flags phishing | Legitimate |
+| U0 | No layer could analyse the URL | Unable to assess |
 
-Failed, inconclusive or unconnected layers are never counted as legitimate votes (C4 results built
+Why binary majority: on the joint evaluation (100 live URLs, 50/50) it reached 91% accuracy,
+96% recall and 14% FPR – better than the best single layer (C1: 89% / 90% / 12%) and than any
+risk-score threshold (e.g. risk ≥ 50: 80% accuracy, 38% FPR). The rule was chosen on those same
+URLs, so it must be confirmed on a new run. It replaces the group report's three-way design
+(v1/v1.1 with "Needs review", Appendix A.3), where 18 single-flag cases contained only 2 phishing sites.
+
+Failed, inconclusive or unconnected layers are never counted as votes (C4 results built
 from zero live data are treated as inconclusive). **Risk score (0–100):** each layer's score is
 scaled so its own threshold sits at 50 (rule decisions use C1's policy values 0/100, a feed match
 uses 100); risk = 50% strongest layer + 50% average layer. Bands: low < 40 ≤ medium < 70 ≤ high.
