@@ -85,6 +85,15 @@
     return { status: "error", message: short(detail) || `Server error (HTTP ${http.status}).` };
   }
 
+  function captureWarning(w) {
+    const code = String(w);
+    if (code.startsWith("http_error_")) return `Page returned HTTP ${code.slice(11)}`;
+    return {
+      possible_access_block_or_verification: "Page looks like an access block or human-verification page",
+      near_blank_capture: "Screenshot is almost blank"
+    }[code] || pretty(code);
+  }
+
   function contractEvidence(e = {}) {
     const out = [];
     if (e.decision_source) out.push(`Decision source: ${pretty(e.decision_source)}`);
@@ -144,6 +153,24 @@
       };
     },
     c3(http) {
+      // 422 = capture needs review, 502 = capture failed: C3 made no prediction, so it never votes.
+      if (http.status === 422 || http.status === 502) {
+        const d = (http.body && typeof http.body.detail === "object" && http.body.detail) || {};
+        const cap = d.capture || {};
+        const evidence = (cap.warnings || []).map(captureWarning);
+        if (Number.isFinite(cap.http_status)) evidence.push(`Page returned HTTP ${cap.http_status}`);
+        if (cap.final_url) evidence.push(`Final page: ${cap.final_url}`);
+        if (cap.error_type) evidence.push(`Browser error: ${cap.error_type}`);
+        if (d.run_id) evidence.push(`Run ID: ${d.run_id}`);
+        const review = http.status === 422;
+        return {
+          status: review ? "inconclusive" : "error",
+          verdict: review ? "Unable to assess – capture needs review" : "Unable to assess – capture failed",
+          message: review ? "The captured page may not show the real website, so no visual prediction was made."
+                          : "The browser could not load the page, so no visual prediction was made.",
+          evidence: [...new Set(evidence)]
+        };
+      }
       if (!http.ok) return httpProblem(http);
       const b = http.body || {};
       return {
@@ -166,7 +193,7 @@
       busy: ["inconclusive", "Busy"],
       error: ["error", "Unavailable"]
     }[r.status] || ["error", "Unavailable"];
-    setState(id, view[0], view[1]);
+    setState(id, view[0], r.verdict || view[1]);
 
     if (r.status === "ok" && Number.isFinite(r.score)) {
       const pct = Math.max(0, Math.min(1, r.score)) * 100;
