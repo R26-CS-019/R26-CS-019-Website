@@ -1,31 +1,30 @@
-/* R26-CS-019 website: send one URL to every connected component API and show
- * each answer separately. API text is only ever inserted with textContent. */
+/* R26-CS-019 website: send one URL to every connected component API, show each
+ * answer separately with a "View analysis" explanation, then fuse the answers.
+ * API text is only ever inserted with textContent. */
 (() => {
   "use strict";
   const cfg = window.R26_CONFIG;
-  const root = document.documentElement;
   const $ = (sel, scope = document) => scope.querySelector(sel);
-
-  /* ---------- theme ---------- */
-  function setTheme(theme) {
-    root.dataset.theme = theme;
-    try { localStorage.setItem("r26-theme", theme); } catch (e) { /* storage blocked */ }
-  }
-  let saved = null;
-  try { saved = localStorage.getItem("r26-theme"); } catch (e) { /* storage blocked */ }
-  setTheme(saved || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
-  $("#theme").addEventListener("click", () => setTheme(root.dataset.theme === "dark" ? "light" : "dark"));
 
   /* ---------- cards ---------- */
   const cards = {};
   const tpl = $("#card-tpl");
   for (const c of cfg.components) {
     const node = tpl.content.firstElementChild.cloneNode(true);
+    $(".dnum", node).textContent = c.id;
     $(".tag", node).textContent = `${c.id} · ${c.layer}`;
     $(".card-title", node).textContent = c.name;
     $(".owner", node).textContent = c.owner;
     $("#cards").appendChild(node);
     cards[c.id] = node;
+    const button = $(".view", node);
+    const panel = $(".analysis", node);
+    button.addEventListener("click", () => {
+      const open = panel.hidden;
+      panel.hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+      button.textContent = open ? "Hide analysis" : "View analysis";
+    });
     if (c.url) setState(c.id, "idle", "Waiting for a URL");
     else setState(c.id, "off", "Not connected yet");
   }
@@ -47,8 +46,14 @@
     const card = cards[id];
     $(".meter", card).hidden = true;
     $(".message", card).textContent = "";
-    $(".evidence", card).replaceChildren();
     $(".elapsed", card).textContent = "";
+    const button = $(".view", card);
+    button.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    button.textContent = "View analysis";
+    const panel = $(".analysis", card);
+    panel.hidden = true;
+    panel.replaceChildren();
   }
 
   /* ---------- network ---------- */
@@ -74,10 +79,159 @@
       .catch(() => setDot(c.id, "err", "No reply"));
   }
 
-  /* ---------- adapters: map each API's own format to one shape ---------- */
+  /* ---------- plain-language analysis builders ---------- */
   const pretty = s => String(s ?? "").replace(/_/g, " ").toLowerCase();
   const short = v => (typeof v === "string" ? v : JSON.stringify(v ?? "")).slice(0, 240);
+  const num = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "–");
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+  function analysis(headline, sections, details, limits) {
+    return {
+      headline,
+      sections: sections.filter(s => s.items.length),
+      details: details.filter(d => d[1] !== null && d[1] !== undefined && d[1] !== "" && d[1] !== "–"),
+      limits
+    };
+  }
+
+  const LIMITS = {
+    C1: "C1 only reads the domain name as text (offline). It never fetches the page, so it cannot see the page's content, its appearance or the hosting behind it.",
+    C2: "C2 reads the page's source code and does not run its scripts. Pages built mainly by JavaScript, or sites that block cloud servers, can look different from what a visitor sees. The cues above are the easiest-to-read signs; the model weighs 106 features together.",
+    C3: "C3 judges a screenshot taken by a hidden browser. A cookie banner, a different language or region, or a page that has not finished loading can change the picture. Its test data also had a screenshot-size shortcut, so treat the score with caution.",
+    C4: "C4 looks only at infrastructure (DNS, registration, certificate, hosting), not at the name or the page. Missing live data pushes it towards “legitimate”, and its training data contained almost only phishing “www.” hosts, so “www.” addresses can be over-flagged."
+  };
+
+  function fallbackAnalysis(id, r) {
+    return analysis(
+      "This layer gave no verdict, so it did not vote in the fused result.",
+      [{ title: "What happened", items: [r.message || "No usable answer was returned."] },
+       { title: "Details", items: r.evidence || [] }],
+      [], LIMITS[id]);
+  }
+
+  function analysisC1(b) {
+    const src = b.decision_source;
+    const p = b.phishing_probability, t = b.frozen_threshold;
+    const phish = b.prediction === "PHISHING";
+    let headline;
+    const why = [];
+    if (src === "trusted_allowlist") {
+      headline = `Legitimate – ${b.registered_domain || "this domain"} is on the trusted-domain list.`;
+      why.push("The registered domain exactly matches one of 68 well-known trusted domains, so no imitation is possible.");
+      if (Number.isFinite(p)) why.push(`The learned model alone scored ${num(p)} (threshold ${num(t)}); the allowlist overrides it, so that number is shown for transparency only.`);
+    } else if (src === "deterministic_typosquatting_evidence") {
+      headline = `Phishing – the domain imitates ${b.nearest_trusted_domain || "a trusted brand"}.`;
+      why.push("A rule written for typosquatting fired. Rules override the model because they name a specific imitation trick.");
+      for (const r of (b.applied_rules || [])) why.push(`Rule: ${pretty(r)}`);
+    } else {
+      headline = `${phish ? "Phishing" : "Legitimate"} – the learned model scored ${num(p)} against a threshold of ${num(t)}.`;
+      why.push(phish ? "The score is at or above the threshold, so the domain name looks like phishing domains the model has seen."
+                     : "The score is below the threshold, so the domain name does not look like a typical phishing domain.");
+      why.push("No allowlist match and no typosquatting rule fired, so the model decided.");
+    }
+    return analysis(headline,
+      [{ title: "Why", items: why }, { title: "Evidence from the domain name", items: b.evidence || [] }],
+      [["Registered domain", b.registered_domain], ["Decision made by", pretty(src)], ["Confidence", pretty(b.confidence)],
+       ["Nearest trusted domain", b.nearest_trusted_domain],
+       ["Edit distance to it", Number.isFinite(b.damerau_distance) ? String(b.damerau_distance) : null],
+       ["Similarity (Jaro–Winkler)", num(b.jaro_winkler_similarity, 3)],
+       ["Model parts", Number.isFinite(b.tabular_probability) ? `features ${num(b.tabular_probability)} · characters ${num(b.character_probability)}` : null]],
+      LIMITS.C1);
+  }
+
+  function analysisC2(body) {
+    const d = body.details || {};
+    const f = d.features || {};
+    const n = k => Number(f[k]) || 0;
+    const score = body.score, thr = body.threshold;
+    const suspicious = [], calm = [];
+    if (n("password_form_cross_site_action_count")) suspicious.push(`${plural(n("password_form_cross_site_action_count"), "login form sends", "login forms send")} the password to a different website`);
+    if (n("form_cross_site_action_count") && !n("password_form_cross_site_action_count")) suspicious.push(`${plural(n("form_cross_site_action_count"), "form sends", "forms send")} data to a different website`);
+    if (n("form_https_to_http_action_count")) suspicious.push(`${plural(n("form_https_to_http_action_count"), "form submits", "forms submit")} from a secure page to an unencrypted address`);
+    if (n("context_plaintext_passwordlike_control_count")) suspicious.push(`${plural(n("context_plaintext_passwordlike_control_count"), "field looks", "fields look")} like a password box but shows the text in plain view`);
+    if (n("context_identity_password_pair_form_count")) suspicious.push(`${plural(n("context_identity_password_pair_form_count"), "form asks", "forms ask")} for a username and a password together`);
+    else if (n("password_input_count")) suspicious.push(`${plural(n("password_input_count"), "password box", "password boxes")} on the page`);
+    if (n("iframe_hidden_hint_count")) suspicious.push(`${plural(n("iframe_hidden_hint_count"), "hidden frame", "hidden frames")} embedded in the page`);
+    if (n("meta_refresh_cross_site_count")) suspicious.push("the page can redirect the visitor to another website automatically");
+    if (n("js_eval_call_count") + n("js_atob_call_count") + n("js_decode_call_count") + n("js_char_code_call_count")) suspicious.push("scripts decode or hide their own code (eval, atob or character codes)");
+    if (n("js_location_assignment_count")) suspicious.push("a script redirects the page");
+    if (n("js_fetch_call_count") + n("js_xhr_constructor_count") + n("js_sendbeacon_call_count")) suspicious.push("scripts send data in the background");
+    if (n("script_cross_site_count") > 3) suspicious.push(`${n("script_cross_site_count")} scripts are loaded from other websites`);
+    if (!n("form_count") && !n("password_input_count")) calm.push("no forms or password boxes were found, so there is nothing to steal credentials with");
+    else if (!n("password_form_cross_site_action_count") && !n("form_cross_site_action_count")) calm.push("forms on the page send their data back to the same website");
+    if (!n("js_eval_call_count") && !n("js_atob_call_count") && !n("js_decode_call_count")) calm.push("no hidden or encoded script tricks were found");
+    if (!n("iframe_hidden_hint_count") && !n("meta_refresh_cross_site_count")) calm.push("no hidden frames or automatic redirects to other websites");
+    const phish = body.label === "phishing";
+    const headline = body.status !== "ok"
+      ? "No verdict – the page could not be read, so this layer did not vote."
+      : `${phish ? "Phishing" : "Legitimate"} – the page-code model scored ${num(score)} against a threshold of ${num(thr)}.`;
+    const flags = ((body.evidence || {}).active_quality_flags || []).map(pretty);
+    const cap = (body.evidence || {}).capture || {};
+    return analysis(headline,
+      [{ title: body.status === "ok" ? "Signs that raise suspicion" : "What happened", items: body.status === "ok" ? suspicious : [body.message || "The page could not be fetched."] },
+       { title: "Calm signs", items: body.status === "ok" ? calm : [] },
+       { title: "Capture quality", items: flags.map(x => `Flag: ${x}`) }],
+      [["Final page", cap.final_url], ["Page size", Number.isFinite(d.html_characters) ? `${d.html_characters.toLocaleString()} characters` : null],
+       ["Forms · password boxes", f.form_count !== undefined ? `${n("form_count")} · ${n("password_input_count")}` : null],
+       ["Scripts (external)", f.script_count !== undefined ? `${n("script_count")} (${n("script_external_count")})` : null],
+       ["Capture method", pretty(d.capture_basis)]],
+      LIMITS.C2);
+  }
+
+  function analysisC3(b) {
+    const phish = b.prediction === "PHISHING";
+    const modelLabel = b.model_used === "MODEL_1" ? "login-page model" : "general-page model";
+    const why = [
+      `The page was classed as ${pretty(b.page_type)} (router confidence ${b.router_confidence ?? "–"}), so the ${modelLabel} judged the screenshot.`,
+      phish ? `The model scored ${num(b.phishing_probability)}, at or above its threshold of ${num(b.threshold)}: the screenshot resembles phishing pages it learned from.`
+            : `The model scored ${num(b.phishing_probability)}, below its threshold of ${num(b.threshold)}: the screenshot does not resemble the phishing pages it learned from.`
+    ];
+    const cap = ((b.diagnostics || {}).capture) || {};
+    return analysis(
+      `${phish ? "Phishing" : "Legitimate"} – the visual model scored ${num(b.phishing_probability)} against a threshold of ${num(b.threshold)}.`,
+      [{ title: "Why", items: why }],
+      [["Page type", pretty(b.page_type)], ["Router confidence", b.router_confidence], ["Model", b.model_name],
+       ["Final page", cap.final_url], ["Page returned", Number.isFinite(cap.http_status) ? `HTTP ${cap.http_status}` : null],
+       ["Run ID", b.run_id]],
+      LIMITS.C3);
+  }
+
+  function analysisC3Capture(status, d, evidence) {
+    const review = status === 422;
+    return analysis(
+      review ? "No verdict – the captured page may not show the real website, so no visual prediction was made."
+             : "No verdict – the browser could not load the page, so no visual prediction was made.",
+      [{ title: "What the browser saw", items: evidence },
+       { title: "Why this matters", items: ["A screenshot of an error, block or blank page says nothing about the real site, so C3 refuses to guess. It did not vote in the fused result."] }],
+      [["Run ID", d.run_id]], LIMITS.C3);
+  }
+
+  function analysisC4(body) {
+    const e = body.evidence || {};
+    const phish = body.label === "phishing";
+    const groups = e.available_groups || {};
+    const names = { DNS: "DNS records", RDAP: "registration (RDAP/WHOIS)", TLS: "TLS certificate", IP: "IP and hosting" };
+    const have = Object.keys(groups).filter(k => groups[k]).map(k => names[k] || k);
+    const miss = Object.keys(groups).filter(k => !groups[k]).map(k => names[k] || k);
+    const listed = String(e.decision_source || "").startsWith("OPENPHISH");
+    const why = [];
+    if (listed) why.push("This exact address is listed in the OpenPhish feed of reported phishing sites, which decides the result on its own.");
+    why.push(`The infrastructure model scored ${num(body.score)} against a threshold of ${num(body.threshold)}${e.model_prediction ? ` (${pretty(e.model_prediction)})` : ""}.`);
+    if (e.reputation && e.reputation.reason) why.push(e.reputation.reason);
+    if (phish && String(e.host || "").startsWith("www.")) why.push("Note: this address starts with “www.”. In C4's training data almost every “www.” host was phishing, so such addresses can be over-flagged.");
+    const headline = body.status === "ok"
+      ? `${phish ? "Phishing" : "Legitimate"} – ${listed ? "listed in the OpenPhish feed." : `the infrastructure model scored ${num(body.score)} against a threshold of ${num(body.threshold)}.`}`
+      : "No verdict – not enough live infrastructure data, so this layer did not vote.";
+    return analysis(headline,
+      [{ title: "Why", items: why },
+       { title: "Data collected", items: [have.length ? `Collected: ${have.join(", ")}` : "", miss.length ? `Not available: ${miss.join(", ")}` : "", e.data_availability_note || ""].filter(Boolean) }],
+      [["Host analysed", e.host], ["Live features observed", Number.isFinite(e.observed_features) ? `${e.observed_features} of ${e.total_features}` : null],
+       ["Data quality", pretty(e.data_quality)], ["Decision made by", pretty(e.decision_source)],
+       ["Reputation feed", e.reputation && pretty(e.reputation.status)]],
+      LIMITS.C4);
+  }
+
+  /* ---------- adapters: map each API's own format to one shape ---------- */
   function httpProblem(http) {
     const detail = http.body && (http.body.detail ?? http.body.message);
     if (http.status === 429) return { status: "busy", message: "This component is busy with another analysis. Try again shortly." };
@@ -94,22 +248,8 @@
     }[code] || pretty(code);
   }
 
-  function contractEvidence(e = {}) {
-    const out = [];
-    if (e.decision_source) out.push(`Decision source: ${pretty(e.decision_source)}`);
-    if (e.model_prediction) out.push(`Model alone: ${pretty(e.model_prediction)}`);
-    if (e.reputation && e.reputation.status) out.push(`Reputation feed: ${pretty(e.reputation.status)}`);
-    if (e.data_quality) out.push(`Data quality: ${pretty(e.data_quality)}`);
-    if (Number.isFinite(e.observed_features)) out.push(`Live features observed: ${e.observed_features} of ${e.total_features}`);
-    if (e.data_availability_note) out.push(e.data_availability_note);
-    if (e.capture && e.capture.final_url) out.push(`Final page: ${e.capture.final_url}`);
-    for (const flag of (e.active_quality_flags || []).slice(0, 3)) out.push(`Quality flag: ${pretty(flag)}`);
-    if (e.needs_review) out.push("Marked for human review");
-    return out;
-  }
-
   const adapters = {
-    contract(http) {
+    contract(http, id) {
       if (!http.ok) return httpProblem(http);
       const b = http.body || {};
       const e = b.evidence || {};
@@ -122,11 +262,12 @@
         message = "No live infrastructure data could be collected – not counted as a vote.";
       }
       const listed = status === "ok" && source.startsWith("OPENPHISH");
+      const view = { ...b, status: status === "ok" ? "ok" : "failed", message };
       return {
         status, label: b.label, score: b.score, threshold: b.threshold, message,
         strong: listed ? "listed in the OpenPhish phishing feed (exact match)" : null,
         policyScore: listed ? 1 : undefined,
-        evidence: contractEvidence(e)
+        analysis: id === "C4" ? analysisC4(view) : analysisC2(view)
       };
     },
     c1(http) {
@@ -134,10 +275,6 @@
       const b = http.body || {};
       // Allowlist/rule decisions override the model, so its raw score is evidence, not the result.
       const byModel = b.decision_source === "frozen_ml_hybrid";
-      const evidence = (b.evidence || []).slice(0, 4);
-      if (!byModel && Number.isFinite(b.phishing_probability)) {
-        evidence.push(`Raw ML score ${b.phishing_probability.toFixed(3)} – overridden by ${pretty(b.decision_source)}`);
-      }
       const allowlisted = b.decision_source === "trusted_allowlist";
       const rule = b.decision_source === "deterministic_typosquatting_evidence";
       return {
@@ -149,7 +286,7 @@
         allowlisted,
         strong: rule ? `typosquatting rule (${(b.applied_rules || []).map(pretty).join(", ") || "imitation pattern"})` : null,
         message: `${pretty(b.detailed_prediction)} · decided by ${pretty(b.decision_source)}`,
-        evidence
+        analysis: analysisC1(b)
       };
     },
     c3(http) {
@@ -161,14 +298,13 @@
         if (Number.isFinite(cap.http_status)) evidence.push(`Page returned HTTP ${cap.http_status}`);
         if (cap.final_url) evidence.push(`Final page: ${cap.final_url}`);
         if (cap.error_type) evidence.push(`Browser error: ${cap.error_type}`);
-        if (d.run_id) evidence.push(`Run ID: ${d.run_id}`);
         const review = http.status === 422;
         return {
           status: review ? "inconclusive" : "error",
           verdict: review ? "Unable to assess – capture needs review" : "Unable to assess – capture failed",
           message: review ? "The captured page may not show the real website, so no visual prediction was made."
                           : "The browser could not load the page, so no visual prediction was made.",
-          evidence: [...new Set(evidence)]
+          analysis: analysisC3Capture(http.status, d, [...new Set(evidence)])
         };
       }
       if (!http.ok) return httpProblem(http);
@@ -178,12 +314,49 @@
         label: b.prediction === "PHISHING" ? "phishing" : "legitimate",
         score: b.phishing_probability, threshold: b.threshold,
         message: `Page type ${pretty(b.page_type)} → ${b.model_used || "model"}`,
-        evidence: [b.model_name && `Model: ${b.model_name}`, b.router_confidence != null && `Router confidence: ${b.router_confidence}`].filter(Boolean)
+        analysis: analysisC3(b)
       };
     }
   };
 
   /* ---------- rendering ---------- */
+  function renderAnalysis(card, a) {
+    const panel = $(".analysis", card);
+    panel.replaceChildren();
+    const h = document.createElement("h4");
+    h.textContent = a.headline;
+    panel.appendChild(h);
+    for (const s of a.sections) {
+      const t = document.createElement("h5");
+      t.textContent = s.title;
+      const ul = document.createElement("ul");
+      for (const item of s.items) {
+        const li = document.createElement("li");
+        li.textContent = item;
+        ul.appendChild(li);
+      }
+      panel.append(t, ul);
+    }
+    if (a.details.length) {
+      const t = document.createElement("h5");
+      t.textContent = "Key numbers";
+      const dl = document.createElement("dl");
+      for (const [k, v] of a.details) {
+        const dt = document.createElement("dt"), dd = document.createElement("dd");
+        dt.textContent = k;
+        dd.textContent = String(v);
+        dl.append(dt, dd);
+      }
+      panel.append(t, dl);
+    }
+    if (a.limits) {
+      const p = document.createElement("p");
+      p.className = "limits";
+      p.textContent = "What this layer cannot see: " + a.limits;
+      panel.appendChild(p);
+    }
+  }
+
   function showResult(id, r, seconds) {
     const card = cards[id];
     const view = {
@@ -206,18 +379,14 @@
       }
     }
     $(".message", card).textContent = r.message || "";
-    const list = $(".evidence", card);
-    for (const item of (r.evidence || []).slice(0, 6)) {
-      const li = document.createElement("li");
-      li.textContent = item;
-      list.appendChild(li);
-    }
+    renderAnalysis(card, r.analysis || fallbackAnalysis(id, r));
+    $(".view", card).hidden = false;
     $(".elapsed", card).textContent = `answered in ${seconds.toFixed(1)} s`;
   }
 
   function renderSummary(target, results) {
-    const summary = $("#summary");
-    summary.hidden = false;
+    const summary = $(".summary-card");
+    $("#summary").hidden = false;
     $("#target").textContent = target;
     const entries = cfg.components.map((c, i) => ({ id: c.id, result: results[i] })).filter((e, i) => cfg.components[i].url);
     const f = window.R26Fusion.fuse(entries);
@@ -268,7 +437,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: target })
       }, c.timeoutMs || cfg.requestTimeoutMs);
-      const result = adapters[c.adapter](http);
+      const result = adapters[c.adapter](http, c.id);
       showResult(c.id, result, (performance.now() - started) / 1000);
       setDot(c.id, "on", "Online");
       return result;
@@ -302,6 +471,6 @@
     renderSummary(target, results);
     button.disabled = false;
     button.textContent = "Analyse";
-    $("#summary").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    $("#summary").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 })();

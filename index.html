@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,108 +10,120 @@
   <meta name="description" content="Adaptive multi-layer phishing detection framework – domain, code, visual and domain-intelligence analysis (SLIIT research project R26-CS-019).">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z' fill='%23f2a93b'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z' fill='%23f5b301'/%3E%3C/svg%3E">
 </head>
 <body>
-  <div class="backdrop" aria-hidden="true"></div>
-
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32"><path d="M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z"/></svg>
-      </span>
-      <span class="brand-text"><b>R26-CS-019</b><small>SLIIT · Cyber Security Research</small></span>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 4 7v8c0 7.5 5.1 13.4 12 15 6.9-1.6 12-7.5 12-15V7z"/></svg>
+        <span><b>R26-CS-019</b><small>Phishing Detection Research</small></span>
+      </a>
+      <nav class="links" aria-label="Main">
+        <a href="#top">Home</a>
+        <a href="#results">Layers</a>
+        <a href="#about">How it works</a>
+        <a href="#team">Team</a>
+        <a class="cta" href="#scan">Scan a URL</a>
+      </nav>
     </div>
-    <nav class="topnav">
-      <a href="#scan">Scan</a>
-      <a href="#layers">Layers</a>
-      <a href="#team">Team</a>
-      <button id="theme" class="theme-btn" type="button" aria-label="Switch light or dark theme">
-        <span class="sun" aria-hidden="true">☀</span><span class="moon" aria-hidden="true">☾</span>
-      </button>
-    </nav>
   </header>
 
-  <main>
-    <section class="hero" id="scan">
-      <p class="eyebrow">Adaptive multi-layer phishing detection</p>
-      <h1>One URL. <span>Four independent lenses.</span></h1>
-      <p class="lead">Each layer of the framework examines the same website on its own terms – its
-        name, its code, how it looks, and the infrastructure behind it – and reports back separately.</p>
-
-      <form id="scan-form" class="scanner" autocomplete="off" novalidate>
-        <label for="url" class="sr-only">Website URL to analyse</label>
-        <span class="prompt" aria-hidden="true">&gt;_</span>
-        <input id="url" name="url" type="text" inputmode="url" spellcheck="false"
-               placeholder="https://example.com/login" required>
-        <button id="go" type="submit">Analyse</button>
-      </form>
-      <p id="form-msg" class="form-msg" role="status" aria-live="polite"></p>
-      <p class="caution">Research prototype. Do not submit links that contain passwords, tokens or personal
-        data. Results support human judgement – "legitimate" is a model output, not a guarantee of safety.</p>
+  <main id="top">
+    <section class="hero">
+      <div class="hero-box">
+        <p class="eyebrow">Adaptive multi-layer phishing detection</p>
+        <h1>One URL.<br>Four independent lenses.</h1>
+        <p class="lead">The domain name, the page code, the page's look and the infrastructure behind it –
+          each layer judges the same website on its own terms.</p>
+        <a class="btn btn-amber" href="#scan">Scan a URL</a>
+      </div>
     </section>
 
-    <section id="summary" class="summary" hidden aria-live="polite">
-      <div class="summary-head">
-        <span class="label">Fused verdict</span>
-        <span id="target" class="target mono"></span>
+    <section class="scan-wrap" id="scan">
+      <div class="wrap">
+        <form id="scan-form" class="scanner" autocomplete="off" novalidate>
+          <h2>Analyse a URL</h2>
+          <label for="url" class="sr-only">Website URL to analyse</label>
+          <input id="url" name="url" type="text" inputmode="url" spellcheck="false" placeholder="https://example.com/login" required>
+          <button id="go" class="btn btn-dark" type="submit">Analyse</button>
+        </form>
+        <p id="form-msg" class="form-msg" role="status" aria-live="polite"></p>
+        <p class="caution">Research prototype. Do not submit links that contain passwords, tokens or personal data.
+          Results support human judgement – “legitimate” is a model output, not a guarantee of safety.</p>
       </div>
-      <div class="fusion">
-        <div id="fused-verdict" class="fused-verdict"></div>
-        <div class="risk">
-          <div class="risk-top"><span class="label">Risk score</span><span id="risk-value" class="risk-value mono"></span></div>
-          <div class="risk-track"><div id="risk-fill" class="risk-fill"></div></div>
+    </section>
+
+    <section class="wrap summary" id="summary" hidden aria-live="polite">
+      <div class="summary-card">
+        <div class="summary-head">
+          <span class="label">Fused verdict</span>
+          <span id="target" class="target"></span>
         </div>
+        <div class="fusion">
+          <div id="fused-verdict" class="fused-verdict"></div>
+          <div class="risk">
+            <div class="risk-top"><span class="label">Risk score</span><span id="risk-value" class="risk-value"></span></div>
+            <div class="risk-track"><div id="risk-fill" class="risk-fill"></div></div>
+          </div>
+        </div>
+        <p id="fused-reason" class="fused-reason"></p>
+        <p id="summary-line" class="summary-detail"></p>
+        <div id="tally" class="tally" aria-hidden="true"></div>
+        <p class="summary-note">Decision fusion v1.2: Phishing when two or more answering layers agree or a strong-evidence
+          rule fires, otherwise Legitimate. Failed layers never vote. The risk score is not a calibrated probability.</p>
       </div>
-      <p id="fused-reason" class="fused-reason"></p>
-      <p id="summary-line" class="summary-detail mono"></p>
-      <div id="tally" class="tally" aria-hidden="true"></div>
-      <p class="summary-note">Decision fusion v1.2 (binary): Phishing when two or more answering layers agree or a
-        strong-evidence rule fires, otherwise Legitimate. Failed layers never vote. The risk score blends the strongest
-        warning with the average of all answering layers, each scaled so its own threshold sits at 50. It is not a
-        calibrated probability.</p>
     </section>
 
-    <section class="grid" id="cards" aria-label="Component results"></section>
+    <section class="wrap results" id="results">
+      <p class="eyebrow dark">The four layers</p>
+      <h2 class="section-title">What each layer says</h2>
+      <div class="grid" id="cards"></div>
+    </section>
 
-    <section class="layers" id="layers">
-      <h2>The four layers</h2>
-      <ol class="layer-list">
-        <li><span class="mono">C1</span><div><h3>Domain name</h3><p>Typosquatting rules and a LightGBM + character n-gram model judge the
-          registered domain alone, before any page is fetched.</p></div></li>
-        <li><span class="mono">C2</span><div><h3>Page code</h3><p>A frozen LightGBM model reads 106 static HTML/JavaScript features –
-          forms, credential cues, scripts and links – from the page source.</p></div></li>
-        <li><span class="mono">C3</span><div><h3>Visual appearance</h3><p>Two EfficientNetV2B0 CNNs score a screenshot of login or general
-          pages, with Grad-CAM explanations.</p></div></li>
-        <li><span class="mono">C4</span><div><h3>Infrastructure</h3><p>DNS, RDAP/WHOIS, TLS and hosting intelligence feed a tuned LightGBM
-          model, alongside a separate reputation lookup.</p></div></li>
-      </ol>
+    <section class="about" id="about">
+      <div class="wrap">
+        <p class="eyebrow dark">How it works</p>
+        <h2 class="section-title">Four evidence layers, one decision</h2>
+        <ol class="steps">
+          <li><span class="diamond"><span>C1</span></span><div><h3>Domain name</h3><p>Typosquatting rules and a LightGBM + character n-gram model judge the registered domain alone, before any page is fetched.</p></div></li>
+          <li><span class="diamond"><span>C2</span></span><div><h3>Page code</h3><p>A frozen LightGBM model reads 106 static HTML and JavaScript features – forms, credential cues, scripts and links.</p></div></li>
+          <li><span class="diamond"><span>C3</span></span><div><h3>Visual appearance</h3><p>Two EfficientNetV2B0 CNNs score a screenshot of login or general pages.</p></div></li>
+          <li><span class="diamond"><span>C4</span></span><div><h3>Infrastructure</h3><p>DNS, RDAP/WHOIS, TLS and hosting data feed a tuned LightGBM model, next to a separate reputation lookup.</p></div></li>
+        </ol>
+      </div>
     </section>
 
     <section class="team" id="team">
-      <h2>Research team</h2>
-      <div class="team-grid">
-        <div><b>I. A. Niunhella</b><span>IT22131010 · C1</span></div>
-        <div><b>W. M. U. G. Jayawardana</b><span>IT22281050 · C2</span></div>
-        <div><b>M. A. O. Rashmika</b><span>IT22546234 · C3</span></div>
-        <div><b>C. I. Vitharana</b><span>IT22911308 · C4</span></div>
+      <div class="wrap">
+        <p class="eyebrow dark">Research team</p>
+        <h2 class="section-title">Who built it</h2>
+        <div class="team-grid">
+          <div><b>I. A. Niunhella</b><span>IT22131010 · C1</span></div>
+          <div><b>W. M. U. G. Jayawardana</b><span>IT22281050 · C2</span></div>
+          <div><b>M. A. O. Rashmika</b><span>IT22546234 · C3</span></div>
+          <div><b>C. I. Vitharana</b><span>IT22911308 · C4</span></div>
+        </div>
+        <p class="supervisors">Supervisor <b>Mr. Harindra Fernando</b> · Co-supervisor <b>Ms. Ayesha Wijesooriya</b></p>
       </div>
-      <p class="supervisors">Supervisor <b>Mr. Harindra Fernando</b> · Co-supervisor <b>Ms. Ayesha Wijesooriya</b></p>
     </section>
   </main>
 
   <footer class="footer">
-    <span>R26-CS-019 · Department of Computer Systems Engineering · Sri Lanka Institute of Information Technology</span>
-    <span>Code: <a href="https://github.com/R26-CS-019" rel="noopener">github.com/R26-CS-019</a></span>
+    <div class="wrap footer-inner">
+      <span>R26-CS-019 · Department of Computer Systems Engineering · Sri Lanka Institute of Information Technology</span>
+      <span>Code: <a href="https://github.com/R26-CS-019" rel="noopener">github.com/R26-CS-019</a></span>
+    </div>
   </footer>
 
   <template id="card-tpl">
     <article class="card">
       <header class="card-head">
-        <div>
-          <span class="tag mono"></span>
+        <span class="diamond"><span class="dnum"></span></span>
+        <div class="card-id">
+          <p class="tag"></p>
           <h3 class="card-title"></h3>
           <p class="owner"></p>
         </div>
@@ -121,12 +133,15 @@
         <div class="verdict">Waiting for a URL</div>
         <div class="meter" hidden>
           <div class="meter-track"><div class="meter-fill"></div><div class="meter-thr"></div></div>
-          <div class="meter-legend mono"><span class="score"></span><span class="thr"></span></div>
+          <div class="meter-legend"><span class="score"></span><span class="thr"></span></div>
         </div>
         <p class="message"></p>
-        <ul class="evidence"></ul>
+        <div class="card-actions">
+          <button class="btn btn-outline view" type="button" aria-expanded="false" hidden>View analysis</button>
+          <span class="elapsed"></span>
+        </div>
       </div>
-      <footer class="card-foot mono"><span class="elapsed"></span></footer>
+      <div class="analysis" hidden></div>
       <div class="scanline" aria-hidden="true"></div>
     </article>
   </template>
