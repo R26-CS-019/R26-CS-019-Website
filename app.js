@@ -207,7 +207,7 @@
     if (input) figures.push({ src: input, alt: "The image the CNN received after resizing and cropping", caption: "What the CNN actually received (resized and cropped)" });
     const gc = ve.gradcam || {};
     const gcItems = [];
-    if (gc.status === "ok") {
+    if (gc.status === "ready" || gc.status === "ok") {
       const pm = dataImage("image/png", gc.phishing_overlay_png_base64), lm = dataImage("image/png", gc.legitimate_overlay_png_base64);
       if (pm) figures.push({ src: pm, alt: "Grad-CAM heat-map for the phishing class", caption: "Grad-CAM – where the network pushed the score towards PHISHING" });
       if (lm) figures.push({ src: lm, alt: "Grad-CAM heat-map for the legitimate class", caption: "Grad-CAM – where the network pushed the score towards LEGITIMATE" });
@@ -215,7 +215,7 @@
       gcItems.push(`Read the map that matches the verdict: the ${phish ? "PHISHING" : "LEGITIMATE"} map shows what supported this result.`);
       gcItems.push("The maps are coarse (the last feature grid is only 5×12 for the login model and 7×12 for the general model) and are scaled per image, so colours cannot be compared between pages.");
       gcItems.push("A highlighted area shows where the model looked, not proof of why a page is phishing.");
-    } else if (gc.status === "failed") {
+    } else if (gc.status === "failed" || gc.status === "unavailable") {
       gcItems.push("Grad-CAM could not be computed for this page. The prediction itself is not affected.");
     } else if (!b.visual_evidence) {
       gcItems.push("This C3 server version does not send the screenshot or Grad-CAM heat-maps yet.");
