@@ -85,13 +85,27 @@
   const num = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "–");
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-  function analysis(headline, sections, details, limits) {
+  function analysis(headline, sections, details, limits, images = []) {
     return {
       headline,
       sections: sections.filter(s => s.items.length),
       details: details.filter(d => d[1] !== null && d[1] !== undefined && d[1] !== "" && d[1] !== "–"),
-      limits
+      limits,
+      images
     };
+  }
+
+  // Only plain base64 of an expected image type is turned into a data: URI (CSP allows data: images).
+  function dataImage(mime, b64) {
+    if (typeof b64 !== "string" || b64.length < 50 || b64.length > 3000000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null;
+    return `data:${mime};base64,${b64}`;
+  }
+
+  function visualFigures(ve) {
+    const figs = [];
+    const shot = dataImage("image/jpeg", ve.screenshot_jpeg_base64);
+    if (shot) figs.push({ src: shot, alt: "Screenshot of the page captured by C3's browser", caption: "Screenshot captured by C3's hidden browser" });
+    return figs;
   }
 
   const LIMITS = {
@@ -187,13 +201,32 @@
             : `The model scored ${num(b.phishing_probability)}, below its threshold of ${num(b.threshold)}: the screenshot does not resemble the phishing pages it learned from.`
     ];
     const cap = ((b.diagnostics || {}).capture) || {};
+    const ve = b.visual_evidence || {};
+    const figures = visualFigures(ve);
+    const input = dataImage("image/png", ve.model_input_png_base64);
+    if (input) figures.push({ src: input, alt: "The image the CNN received after resizing and cropping", caption: "What the CNN actually received (resized and cropped)" });
+    const gc = ve.gradcam || {};
+    const gcItems = [];
+    if (gc.status === "ok") {
+      const pm = dataImage("image/png", gc.phishing_overlay_png_base64), lm = dataImage("image/png", gc.legitimate_overlay_png_base64);
+      if (pm) figures.push({ src: pm, alt: "Grad-CAM heat-map for the phishing class", caption: "Grad-CAM – where the network pushed the score towards PHISHING" });
+      if (lm) figures.push({ src: lm, alt: "Grad-CAM heat-map for the legitimate class", caption: "Grad-CAM – where the network pushed the score towards LEGITIMATE" });
+      gcItems.push("Warm colours (yellow to red) show the areas that influenced the score most; dark blue means little influence.");
+      gcItems.push(`Read the map that matches the verdict: the ${phish ? "PHISHING" : "LEGITIMATE"} map shows what supported this result.`);
+      gcItems.push("The maps are coarse (the last feature grid is only 5×12 for the login model and 7×12 for the general model) and are scaled per image, so colours cannot be compared between pages.");
+      gcItems.push("A highlighted area shows where the model looked, not proof of why a page is phishing.");
+    } else if (gc.status === "failed") {
+      gcItems.push("Grad-CAM could not be computed for this page. The prediction itself is not affected.");
+    } else if (!b.visual_evidence) {
+      gcItems.push("This C3 server version does not send the screenshot or Grad-CAM heat-maps yet.");
+    }
     return analysis(
       `${phish ? "Phishing" : "Legitimate"} – the visual model scored ${num(b.phishing_probability)} against a threshold of ${num(b.threshold)}.`,
-      [{ title: "Why", items: why }],
+      [{ title: "Why", items: why }, { title: "How to read the heat-maps", items: gcItems }],
       [["Page type", pretty(b.page_type)], ["Router confidence", b.router_confidence], ["Model", b.model_name],
        ["Final page", cap.final_url], ["Page returned", Number.isFinite(cap.http_status) ? `HTTP ${cap.http_status}` : null],
        ["Run ID", b.run_id]],
-      LIMITS.C3);
+      LIMITS.C3, figures);
   }
 
   function analysisC3Capture(status, d, evidence) {
@@ -203,7 +236,7 @@
              : "No verdict – the browser could not load the page, so no visual prediction was made.",
       [{ title: "What the browser saw", items: evidence },
        { title: "Why this matters", items: ["A screenshot of an error, block or blank page says nothing about the real site, so C3 refuses to guess. It did not vote in the fused result."] }],
-      [["Run ID", d.run_id]], LIMITS.C3);
+      [["Run ID", d.run_id]], LIMITS.C3, visualFigures(d.visual_evidence || {}));
   }
 
   function analysisC4(body) {
@@ -326,6 +359,24 @@
     const h = document.createElement("h4");
     h.textContent = a.headline;
     panel.appendChild(h);
+    if (a.images && a.images.length) {
+      const t = document.createElement("h5");
+      t.textContent = "What C3 saw";
+      const wrap = document.createElement("div");
+      wrap.className = "figures";
+      for (const f of a.images) {
+        const fig = document.createElement("figure");
+        const img = document.createElement("img");
+        img.src = f.src;
+        img.alt = f.alt;
+        img.loading = "lazy";
+        const cap = document.createElement("figcaption");
+        cap.textContent = f.caption;
+        fig.append(img, cap);
+        wrap.appendChild(fig);
+      }
+      panel.append(t, wrap);
+    }
     for (const s of a.sections) {
       const t = document.createElement("h5");
       t.textContent = s.title;
